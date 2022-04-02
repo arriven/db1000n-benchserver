@@ -83,6 +83,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	logger.Info("starting server", zap.String("type", *serverType), zap.String("listen", *listenAddress))
 	switch *serverType {
 	case "http":
 		http(logger)
