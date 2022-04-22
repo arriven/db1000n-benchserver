@@ -49,10 +49,75 @@ func http(logger *zap.Logger) {
 	}
 }
 
+func udp(logger *zap.Logger, network string) {
+	udpADDR, err := net.ResolveUDPAddr(network, *listenAddress)
+	if err != nil {
+		logger.Fatal("cannot resolve listen address", zap.Error(err))
+	}
+	pc, err := net.ListenUDP(network, udpADDR)
+	if err != nil {
+		logger.Fatal("cannot listen", zap.Error(err))
+	}
+	defer pc.Close()
+
+	for {
+		buf := make([]byte, 1024)
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			continue
+		}
+		logger.Info("got message", zap.ByteString("buf", buf), zap.Int("size", n), zap.Any("addr", addr))
+	}
+}
+
+func tcp(logger *zap.Logger, network string) {
+	var bytesRead uint64
+	addr, err := net.ResolveTCPAddr(network, *listenAddress)
+	if err != nil {
+		logger.Fatal("cannot resolve listen address", zap.Error(err))
+	}
+	l, err := net.ListenTCP(network, addr)
+	if err != nil {
+		logger.Fatal("cannot listen", zap.Error(err))
+	}
+	defer l.Close()
+
+	start := time.Now()
+	response := strings.Repeat("a", int(*responseSize))
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			logger.Info("bytes read", zap.Uint64("bytes", bytesRead), zap.Duration("duration", time.Since(start)))
+		}
+	}()
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			continue
+		}
+
+		go func(conn net.Conn) {
+			for {
+				buf := make([]byte, 1024)
+				n, err := conn.Read(buf)
+				if err != nil {
+					continue
+				}
+				atomic.AddUint64(&bytesRead, uint64(n))
+				_, err = conn.Write([]byte(response))
+				if err != nil {
+					continue
+				}
+			}
+		}(conn)
+	}
+}
+
 func ip(logger *zap.Logger, network string) {
 	counter := 0
 	start := time.Now()
-	decodingLayer := layers.LayerTypeIPv4
+	decodingLayer := layers.LayerTypeUDP
 	if strings.HasPrefix(network, "ip6") {
 		decodingLayer = layers.LayerTypeIPv6
 	}
@@ -87,6 +152,10 @@ func main() {
 	switch *serverType {
 	case "http":
 		http(logger)
+	case "udp":
+		udp(logger, *serverType)
+	case "tcp":
+		tcp(logger, *serverType)
 	default:
 		ip(logger, *serverType)
 	}
