@@ -97,6 +97,8 @@ func tcp(logger *zap.Logger, network string) {
 			continue
 		}
 
+		logger.Info("accepted connection", zap.Any("local_addr", conn.LocalAddr()), zap.Any("remote_addr", conn.RemoteAddr()))
+
 		go func(conn net.Conn) {
 			for {
 				buf := make([]byte, 1024)
